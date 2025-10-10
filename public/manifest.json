@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "AI Application Strategist MVP",
+  "version": "1.0.0",
+  "description": "Semantic autofill and cover letter generation using Gemini API.",
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*/*"
+  ],
+  "background": {
+    "service_worker": "src/service-worker/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["src/content-script/content.js"]
+    }
+  ],
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "action": {
+    "default_title": "AI Strategist"
+  }
+}

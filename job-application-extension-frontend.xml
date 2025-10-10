@@ -1,0 +1,750 @@
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching these patterns are excluded: **/*.svg
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+eslint.config.js
+index.html
+package.json
+public/manifest.json
+README.md
+src/api.js
+src/App.jsx
+src/components/SidePanelApp.jsx
+src/content-script/content.js
+src/main.jsx
+src/service-worker/background.js
+src/sidepanel/index.jsx
+src/styles.css
+tsconfig.node.json
+vite.config.js
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".gitignore">
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+</file>
+
+<file path="eslint.config.js">
+import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import tseslint from 'typescript-eslint'
+import { defineConfig, globalIgnores } from 'eslint/config'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      js.configs.recommended,
+      tseslint.configs.recommended,
+      reactHooks.configs['recommended-latest'],
+      reactRefresh.configs.vite,
+    ],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
+    },
+  },
+])
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Strategist Side Panel</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- UPDATE SCRIPT PATH -->
+    <script type="module" src="/src/sidepanel/index.jsx"></script> 
+  </body>
+</html>
+</file>
+
+<file path="package.json">
+{
+  "name": "job-application-extension-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.3.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/node": "^24.6.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.22",
+    "globals": "^16.4.0",
+    "typescript-eslint": "^8.45.0",
+    "vite": "^7.1.7"
+  }
+}
+</file>
+
+<file path="public/manifest.json">
+{
+  "manifest_version": 3,
+  "name": "AI Application Strategist MVP",
+  "version": "1.0.0",
+  "description": "Semantic autofill and cover letter generation using Gemini API.",
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*/*"
+  ],
+  "background": {
+    "service_worker": "src/service-worker/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["src/content-script/content.js"]
+    }
+  ],
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "action": {
+    "default_title": "AI Strategist"
+  }
+}
+</file>
+
+<file path="src/api.js">
+// WARNING: This URL must match your running backend environment.
+const API_BASE_URL = 'http://localhost:3000'; 
+
+// Use the mock UID from the backend's dummy authMiddleware
+// In a real app, this would come from a secure storage (e.g., chrome.storage.local)
+const MOCK_TOKEN = 'local-mock-token';
+
+/**
+ * Perform an authenticated fetch to the backend.
+ * @param {string} endpoint - The API endpoint (e.g., '/api/llm/semantic-analysis')
+ * @param {object} body - The request body data
+ * @returns {Promise<object>} The JSON response
+ */
+export async function authenticatedFetch(endpoint, body = {}) {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${MOCK_TOKEN}`
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API call failed (${endpoint}): ${response.status} - ${errorText}`);
+    }
+
+    return response.json();
+}
+</file>
+
+<file path="src/App.jsx">
+import { useState } from 'react'
+import reactLogo from './assets/react.svg'
+import viteLogo from '/vite.svg'
+import './App.css'
+
+function App() {
+  const [count, setCount] = useState(0)
+
+  return (
+    <>
+      <div>
+        <a href="https://vite.dev" target="_blank">
+          <img src={viteLogo} className="logo" alt="Vite logo" />
+        </a>
+        <a href="https://react.dev" target="_blank">
+          <img src={reactLogo} className="logo react" alt="React logo" />
+        </a>
+      </div>
+      <h1>Vite + React</h1>
+      <div className="card">
+        <button onClick={() => setCount((count) => count + 1)}>
+          count is {count}
+        </button>
+        <p>
+          Edit <code>src/App.tsx</code> and save to test HMR
+        </p>
+      </div>
+      <p className="read-the-docs">
+        Click on the Vite and React logos to learn more
+      </p>
+    </>
+  )
+}
+
+export default App
+</file>
+
+<file path="src/components/SidePanelApp.jsx">
+import React, { useState } from 'react';
+import { Box, Button, Typography, Paper, TextField, CircularProgress } from '@mui/material';
+
+// Mock data for Cover Letter generation (will be stored in chrome.storage.local in the real app)
+const MOCK_RESUME = {
+    basics: {
+        name: "Alice Johnson",
+        label: "Senior Software Engineer",
+        phone: "555-123-4567",
+        email: "alice@dev.com"
+    },
+    work: [{
+        company: "Tech Corp",
+        summary: "Led team of 5 to launch a successful e-commerce platform using React and Node.js."
+    }]
+};
+
+const MOCK_JOB_DESCRIPTION = `
+Senior Software Engineer needed for a high-traffic e-commerce platform. 
+Must have 5+ years of experience with React, Node.js, and MySQL. 
+Strong leadership skills and expertise in cloud deployment (GCP/Vercel) are a must.
+`;
+
+// Relevance scores are not calculated by the MVP, so we mock them to test the prompt
+const MOCK_RELEVANCE_SCORES = {
+    skills: { "React": 95, "Node.js": 88, "Leadership": 75 },
+    experience: { "e-commerce platform": 92 }
+};
+
+
+export function SidePanelApp() {
+    const [loading, setLoading] = useState(false);
+    const [result, setResult] = useState(null);
+    const [error, setError] = useState(null);
+
+    // --- FR 2.2: Semantic Analysis Workflow ---
+    const handleSemanticAnalysis = async () => {
+        setLoading(true);
+        setResult(null);
+        setError(null);
+        try {
+            // 1. FR 2.1: Get contextual form data from Content Script
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const contentScriptResponse = await chrome.tabs.sendMessage(tab.id, { action: 'GET_FORM_FIELD_DATA' });
+
+            if (!contentScriptResponse || contentScriptResponse.status === 'error') {
+                throw new Error("Failed to get form data from current page.");
+            }
+
+            // 2. FR 2.2: Message Service Worker to perform LLM Semantic Analysis
+            const serviceWorkerResponse = await chrome.runtime.sendMessage({
+                action: 'SEMANTIC_ANALYSIS',
+                data: { formFieldData: contentScriptResponse.formData }
+            });
+            
+            if (serviceWorkerResponse.status === 'error') {
+                throw new Error(serviceWorkerResponse.message);
+            }
+
+            const { path } = serviceWorkerResponse.mapping;
+            
+            // MOCK: Get value from mock resume using the returned path
+            // In a real app, you would use a utility like Lodash.get(MOCK_RESUME, path)
+            const mockValue = MOCK_RESUME.basics.phone; // Hardcode a value for the mock
+
+            // 3. FR 2.3: Send final autofill command to Content Script
+            await chrome.tabs.sendMessage(tab.id, { 
+                action: 'PERFORM_AUTOFILL',
+                path: path,
+                value: mockValue
+            });
+
+            setResult(`✅ Mapped to: ${path}. MOCK Autofill (value: ${mockValue}) executed! Check the webpage alert.`);
+
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // --- FR 3.3: Cover Letter Generation Workflow ---
+    const handleGenerateCoverLetter = async () => {
+        setLoading(true);
+        setResult(null);
+        setError(null);
+        try {
+            // Message Service Worker to perform LLM Cover Letter Generation
+            const serviceWorkerResponse = await chrome.runtime.sendMessage({
+                action: 'GENERATE_COVER_LETTER',
+                data: {
+                    jobDescription: MOCK_JOB_DESCRIPTION,
+                    jsonResume: MOCK_RESUME,
+                    relevanceScores: MOCK_RELEVANCE_SCORES
+                }
+            });
+
+            if (serviceWorkerResponse.status === 'error') {
+                throw new Error(serviceWorkerResponse.message);
+            }
+
+            // FR 3.4: Display the draft cover letter
+            setResult(serviceWorkerResponse.coverLetter);
+
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 2, width: 300 }}>
+            <Typography variant="h5" color="primary">AI Strategist</Typography>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Test Core Features (Backend: http://localhost:3000)
+            </Typography>
+
+            <Button 
+                variant="contained" 
+                fullWidth 
+                onClick={handleSemanticAnalysis} 
+                disabled={loading}
+            >
+                {loading ? <CircularProgress size={24} /> : '1. Test Semantic Autofill (FR 2.2)'}
+            </Button>
+            
+            <Button 
+                variant="outlined" 
+                fullWidth 
+                onClick={handleGenerateCoverLetter} 
+                disabled={loading}
+            >
+                {loading ? <CircularProgress size={24} /> : '2. Test Cover Letter Gen (FR 3.3)'}
+            </Button>
+
+            <Paper elevation={3} sx={{ p: 2, mt: 2, overflowY: 'auto', flexGrow: 1, backgroundColor: 'background.default' }}>
+                <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                    Output:
+                </Typography>
+                
+                {error && (
+                    <Typography color="error" variant="body2">
+                        ERROR: {error}
+                    </Typography>
+                )}
+                
+                {result && (
+                    <TextField
+                        fullWidth
+                        multiline
+                        minRows={4}
+                        maxRows={12}
+                        value={result}
+                        variant="outlined"
+                        InputProps={{ readOnly: true }}
+                        sx={{ mt: 1 }}
+                    />
+                )}
+            </Paper>
+        </Box>
+    );
+}
+</file>
+
+<file path="src/content-script/content.js">
+console.log('Content Script Loaded on page.');
+
+// FR 2.1: Mock function to extract form field data
+function getMockFormFieldData() {
+    // In a real implementation, you'd scan the DOM for the active input field
+    // and extract its label, placeholder, name, and surrounding context.
+    return { 
+        label: "Primary Phone Number", 
+        placeholder: "e.g. 555-123-4567", 
+        dom_path: "/html/body/form/input[3]" 
+    };
+}
+
+// Listener for messages from the Side Panel / Service Worker
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // The Side Panel will message the Content Script to get form data
+    if (request.action === 'GET_FORM_FIELD_DATA') {
+        const formData = getMockFormFieldData();
+        sendResponse({ status: 'success', formData });
+        return true; // Keep the message channel open for async response
+    }
+    
+    // The Side Panel will message the Content Script to perform autofill
+    if (request.action === 'PERFORM_AUTOFILL') {
+        // FR 2.3: In a real app, this would inject a value into a specific selector
+        console.log(`Content Script: MOCK Autofill executed for path: ${request.path} with value: ${request.value}`);
+        alert(`MOCK Autofill: Injected '${request.value}' into the field mapped to '${request.path}'.`);
+        sendResponse({ status: 'success' });
+        return true;
+    }
+});
+
+// Optional: Open side panel when action is received from service worker (see background.js)
+chrome.runtime.onMessage.addListener((request) => {
+    if (request.action === 'OPEN_SIDEPANEL') {
+        // This is necessary because service workers cannot open the side panel directly, 
+        // they must use an action that is handled by a visible part of the extension (like the content script).
+        chrome.runtime.sendMessage({ action: 'OPEN_SIDEPANEL' });
+    }
+});
+</file>
+
+<file path="src/main.jsx">
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App.jsx";
+import "./index.css";
+
+createRoot(document.getElementById("root")).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
+</file>
+
+<file path="src/service-worker/background.js">
+import { authenticatedFetch } from '../api'; 
+
+// Listener for messages from the Content Script or Side Panel
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // Return true to indicate that the response will be sent asynchronously
+    let handled = false; 
+
+    // --- Core Feature 1: Semantic Analysis (FR 2.2) ---
+    if (request.action === 'SEMANTIC_ANALYSIS') {
+        const { formFieldData } = request.data;
+        
+        authenticatedFetch('/api/llm/semantic-analysis', { formFieldData })
+            .then(response => {
+                console.log('Semantic Analysis Result:', response.mapping);
+                sendResponse({ status: 'success', mapping: response.mapping });
+            })
+            .catch(error => {
+                console.error('Semantic Analysis Failed:', error);
+                sendResponse({ status: 'error', message: error.message });
+            });
+        handled = true;
+    } 
+    
+    // --- Core Feature 2: Generate Cover Letter (FR 3.3) ---
+    else if (request.action === 'GENERATE_COVER_LETTER') {
+        const { jobDescription, jsonResume, relevanceScores } = request.data;
+
+        authenticatedFetch('/api/llm/generate-cover-letter', { jobDescription, jsonResume, relevanceScores })
+            .then(response => {
+                console.log('Cover Letter Generated:', response.coverLetter);
+                sendResponse({ status: 'success', coverLetter: response.coverLetter });
+            })
+            .catch(error => {
+                console.error('Cover Letter Generation Failed:', error);
+                sendResponse({ status: 'error', message: error.message });
+            });
+        handled = true;
+    }
+    
+    // Set up Side Panel on action icon click (MV3 requirement)
+    if (request.action === 'OPEN_SIDEPANEL') {
+        chrome.sidePanel.open({ tabId: sender.tab.id });
+    }
+
+
+    return handled;
+});
+
+// Set the side panel to be open when the extension icon is clicked
+chrome.action.onClicked.addListener(async (tab) => {
+    await chrome.sidePanel.setOptions({
+        tabId: tab.id,
+        enabled: true
+    });
+    // Message the current tab to open the side panel
+    chrome.tabs.sendMessage(tab.id, { action: 'OPEN_SIDEPANEL' });
+});
+
+console.log("Service Worker Initialized");
+</file>
+
+<file path="src/sidepanel/index.jsx">
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { SidePanelApp } from '../components/SidePanelApp';
+import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
+import '../styles.css';
+
+// 2.2 Design System: Implement Material Design 3 (M3) by creating a basic theme
+const darkTheme = createTheme({
+  palette: {
+    mode: 'dark',
+    // You can customize colors here to match the M3 spec
+    primary: {
+      main: '#bb86fc', // Example primary color
+    },
+    secondary: {
+      main: '#03dac6', // Example secondary color
+    },
+  },
+});
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <ThemeProvider theme={darkTheme}>
+      <CssBaseline />
+      <SidePanelApp />
+    </ThemeProvider>
+  </React.StrictMode>,
+);
+</file>
+
+<file path="src/styles.css">
+/* Minimal CSS to ensure basic setup */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100vh;
+  width: 100%;
+}
+</file>
+
+<file path="tsconfig.node.json">
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["vite.config.ts"]
+}
+</file>
+
+<file path="vite.config.js">
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { resolve } from 'path';
+
+// This is a minimal config. For a production extension, you would use 
+// a dedicated plugin like `vite-plugin-web-extension` for robust multi-entry handling.
+export default defineConfig({
+  plugins: [react()],
+  root: resolve(__dirname, 'src/sidepanel'),
+  build: {
+    outDir: resolve(__dirname, 'dist'),
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        sidepanel: resolve(__dirname, 'public/index.html'),
+        // Explicitly list the JS files for the Service Worker and Content Script
+        // This ensures they are bundled/copied to 'dist'
+        'src/service-worker/background': resolve(__dirname, 'src/service-worker/background.js'),
+        'src/content-script/content': resolve(__dirname, 'src/content-script/content.js'),
+      },
+      output: {
+        // Keeps the Service Worker and Content Script at the root of 'dist'
+        entryFileNames: (assetInfo) => {
+            if (assetInfo.name.includes('service-worker')) {
+                return 'src/service-worker/background.js';
+            }
+            if (assetInfo.name.includes('content-script')) {
+                return 'src/content-script/content.js';
+            }
+            return `assets/[name]-[hash].js`;
+        },
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name].[ext]',
+      },
+    },
+  },
+  // Ensure the public directory is used for assets like manifest.json
+  publicDir: resolve(__dirname, 'public'),
+});
+</file>
+
+<file path="README.md">
+# React + TypeScript + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
+
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```
+
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```
+</file>
+
+</files>
