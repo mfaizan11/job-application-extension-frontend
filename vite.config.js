@@ -17,7 +17,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         // 1. Side Panel HTML (The main React UI)
-        sidepanel: resolve(__dirname, "public/index.html"),
+        sidepanel: resolve(__dirname, "index.html"), // <--- CHANGED: Point to the root index.html
 
         // 2. Service Worker JS
         background: resolve(__dirname, "src/service-worker/background.js"),

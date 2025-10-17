@@ -8,6 +8,23 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { UserDataOverview } from "./UserDataOverview";
+
+// --- Utility function for safe object traversal (simulating Lodash.get) ---
+const get = (object, path, defaultValue) => {
+  // <-- ADDED
+  const result = String(path)
+    .split(".")
+    .reduce((acc, part) => {
+      // Check if acc is null, undefined, or a primitive (preventing property access)
+      if (acc === null || typeof acc !== "object") {
+        return undefined;
+      }
+      return acc[part];
+    }, object);
+
+  return result === undefined ? defaultValue : result;
+};
+
 // Mock data for Cover Letter generation (will be stored in chrome.storage.local in the real app)
 const MOCK_RESUME = {
   basics: {
@@ -75,17 +92,23 @@ export function SidePanelApp() {
 
       // MOCK: Get value from mock resume using the returned path
       // In a real app, you would use a utility like Lodash.get(MOCK_RESUME, path)
-      const mockValue = MOCK_RESUME.basics.phone; // Hardcode a value for the mock
+      const valueToAutofill = get(MOCK_RESUME, path); // <-- UPDATED
+
+      if (valueToAutofill === undefined) {
+        throw new Error(
+          `Mapping successful (${path}), but no value found in resume data.`
+        );
+      }
 
       // 3. FR 2.3: Send final autofill command to Content Script
       await chrome.tabs.sendMessage(tab.id, {
         action: "PERFORM_AUTOFILL",
         path: path,
-        value: mockValue,
+        value: valueToAutofill, // <-- UPDATED
       });
 
       setResult(
-        `✅ Mapped to: ${path}. MOCK Autofill (value: ${mockValue}) executed! Check the webpage alert.`
+        `✅ Mapped to: ${path}. MOCK Autofill (value: ${valueToAutofill}) executed! Check the webpage alert.` // <-- UPDATED
       );
     } catch (err) {
       setError(err.message);
@@ -130,48 +153,32 @@ export function SidePanelApp() {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        gap: 2,
+        gap: 1.5,
         width: 300,
       }}
     >
       <Typography variant="h5" color="primary">
-        AI Strategist
+        Job Application Extension
       </Typography>
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+      {/* <Typography variant="subtitle2" sx={{ mb: 1 }}>
         Test Core Features (Backend: http://localhost:3000)
-      </Typography>
-      <UserDataOverview />
-      <Button
-        variant="contained"
-        fullWidth
-        onClick={handleSemanticAnalysis}
-        disabled={loading}
-      >
-        {loading ? (
-          <CircularProgress size={24} />
-        ) : (
-          "1. Test Semantic Autofill (FR 2.2)"
-        )}
-      </Button>
+      </Typography> */}
+      <UserDataOverview
+        onSemanticAnalysis={handleSemanticAnalysis}
+        onGenerateCoverLetter={handleGenerateCoverLetter}
+        isLoading={loading}
+      />
 
-      <Button
-        variant="outlined"
-        fullWidth
-        onClick={handleGenerateCoverLetter}
-        disabled={loading}
-      >
-        {loading ? (
-          <CircularProgress size={24} />
-        ) : (
-          "2. Test Cover Letter Gen (FR 3.3)"
-        )}
-      </Button>
+      {/* REMOVED: The two buttons for Semantic Autofill and Cover Letter Gen
+          is now inside UserDataOverview as per the new reference image. 
+          The logic (handleSemanticAnalysis / handleGenerateCoverLetter) 
+          is not being used by the UI at this point, which is expected 
+          since we are only focusing on design now. */}
 
       <Paper
         elevation={3}
         sx={{
           p: 2,
-          mt: 2,
           overflowY: "auto",
           flexGrow: 1,
           backgroundColor: "background.default",
@@ -200,6 +207,14 @@ export function SidePanelApp() {
           />
         )}
       </Paper>
+
+      {/* NOTE: If you need to re-enable the functionality testing buttons 
+          (1. Test Semantic Autofill and 2. Test Cover Letter Gen) 
+          in the future, they should be placed here, below the UserDataOverview 
+          and above the Output Panel, as they were originally. 
+          For now, they are removed to match the reference image's layout 
+          that puts "Autofill Form" and "Generate Cover Letter" inside 
+          the UserDataOverview card. */}
     </Box>
   );
 }

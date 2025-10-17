@@ -50,12 +50,12 @@ README.md
 src/api.js
 src/App.jsx
 src/components/SidePanelApp.jsx
+src/components/UserDataOverview.jsx
 src/content-script/content.js
 src/main.jsx
 src/service-worker/background.js
 src/sidepanel/index.jsx
 src/styles.css
-tsconfig.node.json
 vite.config.js
 </directory_structure>
 
@@ -100,7 +100,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores(['dist']),
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ['**/*.{js,jsx,ts,tsx}'],
     extends: [
       js.configs.recommended,
       tseslint.configs.recommended,
@@ -121,7 +121,7 @@ export default defineConfig([
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Strategist Side Panel</title>
+    <title>Job Application Extension</title>
   </head>
   <body>
     <div id="root"></div>
@@ -134,32 +134,32 @@ export default defineConfig([
 <file path="package.json">
 {
   "name": "job-application-extension-frontend",
-  "private": true,
   "version": "0.0.0",
-  "type": "module",
+  "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "build": "vite build",
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/material": "^7.3.4",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "@emotion/react": "^11.11.4",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^7.3.4",
+    "@mui/material": "^5.15.13",
+    "lucide-react": "^0.546.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.36.0",
-    "@types/node": "^24.6.0",
-    "@vitejs/plugin-react": "^5.0.4",
-    "eslint": "^9.36.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.22",
-    "globals": "^16.4.0",
-    "typescript-eslint": "^8.45.0",
-    "vite": "^7.1.7"
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.1",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.6",
+    "vite": "^5.2.0"
   }
 }
 </file>
@@ -269,21 +269,48 @@ export default App
 </file>
 
 <file path="src/components/SidePanelApp.jsx">
-import React, { useState } from 'react';
-import { Box, Button, Typography, Paper, TextField, CircularProgress } from '@mui/material';
+import React, { useState } from "react";
+import {
+  Box,
+  Button,
+  Typography,
+  Paper,
+  TextField,
+  CircularProgress,
+} from "@mui/material";
+import { UserDataOverview } from "./UserDataOverview";
+
+// --- Utility function for safe object traversal (simulating Lodash.get) ---
+const get = (object, path, defaultValue) => {
+  // <-- ADDED
+  const result = String(path)
+    .split(".")
+    .reduce((acc, part) => {
+      // Check if acc is null, undefined, or a primitive (preventing property access)
+      if (acc === null || typeof acc !== "object") {
+        return undefined;
+      }
+      return acc[part];
+    }, object);
+
+  return result === undefined ? defaultValue : result;
+};
 
 // Mock data for Cover Letter generation (will be stored in chrome.storage.local in the real app)
 const MOCK_RESUME = {
-    basics: {
-        name: "Alice Johnson",
-        label: "Senior Software Engineer",
-        phone: "555-123-4567",
-        email: "alice@dev.com"
+  basics: {
+    name: "Alice Johnson",
+    label: "Senior Software Engineer",
+    phone: "555-123-4567",
+    email: "alice@dev.com",
+  },
+  work: [
+    {
+      company: "Tech Corp",
+      summary:
+        "Led team of 5 to launch a successful e-commerce platform using React and Node.js.",
     },
-    work: [{
-        company: "Tech Corp",
-        summary: "Led team of 5 to launch a successful e-commerce platform using React and Node.js."
-    }]
+  ],
 };
 
 const MOCK_JOB_DESCRIPTION = `
@@ -294,187 +321,1082 @@ Strong leadership skills and expertise in cloud deployment (GCP/Vercel) are a mu
 
 // Relevance scores are not calculated by the MVP, so we mock them to test the prompt
 const MOCK_RELEVANCE_SCORES = {
-    skills: { "React": 95, "Node.js": 88, "Leadership": 75 },
-    experience: { "e-commerce platform": 92 }
+  skills: { React: 95, "Node.js": 88, Leadership: 75 },
+  experience: { "e-commerce platform": 92 },
 };
 
-
 export function SidePanelApp() {
-    const [loading, setLoading] = useState(false);
-    const [result, setResult] = useState(null);
-    const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
 
-    // --- FR 2.2: Semantic Analysis Workflow ---
-    const handleSemanticAnalysis = async () => {
-        setLoading(true);
-        setResult(null);
-        setError(null);
-        try {
-            // 1. FR 2.1: Get contextual form data from Content Script
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            const contentScriptResponse = await chrome.tabs.sendMessage(tab.id, { action: 'GET_FORM_FIELD_DATA' });
+  // --- FR 2.2: Semantic Analysis Workflow ---
+  const handleSemanticAnalysis = async () => {
+    setLoading(true);
+    setResult(null);
+    setError(null);
+    try {
+      // 1. FR 2.1: Get contextual form data from Content Script
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      const contentScriptResponse = await chrome.tabs.sendMessage(tab.id, {
+        action: "GET_FORM_FIELD_DATA",
+      });
 
-            if (!contentScriptResponse || contentScriptResponse.status === 'error') {
-                throw new Error("Failed to get form data from current page.");
-            }
+      if (!contentScriptResponse || contentScriptResponse.status === "error") {
+        throw new Error("Failed to get form data from current page.");
+      }
 
-            // 2. FR 2.2: Message Service Worker to perform LLM Semantic Analysis
-            const serviceWorkerResponse = await chrome.runtime.sendMessage({
-                action: 'SEMANTIC_ANALYSIS',
-                data: { formFieldData: contentScriptResponse.formData }
-            });
-            
-            if (serviceWorkerResponse.status === 'error') {
-                throw new Error(serviceWorkerResponse.message);
-            }
+      // 2. FR 2.2: Message Service Worker to perform LLM Semantic Analysis
+      const serviceWorkerResponse = await chrome.runtime.sendMessage({
+        action: "SEMANTIC_ANALYSIS",
+        data: { formFieldData: contentScriptResponse.formData },
+      });
 
-            const { path } = serviceWorkerResponse.mapping;
-            
-            // MOCK: Get value from mock resume using the returned path
-            // In a real app, you would use a utility like Lodash.get(MOCK_RESUME, path)
-            const mockValue = MOCK_RESUME.basics.phone; // Hardcode a value for the mock
+      if (serviceWorkerResponse.status === "error") {
+        throw new Error(serviceWorkerResponse.message);
+      }
 
-            // 3. FR 2.3: Send final autofill command to Content Script
-            await chrome.tabs.sendMessage(tab.id, { 
-                action: 'PERFORM_AUTOFILL',
-                path: path,
-                value: mockValue
-            });
+      const { path } = serviceWorkerResponse.mapping;
 
-            setResult(`✅ Mapped to: ${path}. MOCK Autofill (value: ${mockValue}) executed! Check the webpage alert.`);
+      // MOCK: Get value from mock resume using the returned path
+      // In a real app, you would use a utility like Lodash.get(MOCK_RESUME, path)
+      const valueToAutofill = get(MOCK_RESUME, path); // <-- UPDATED
 
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+      if (valueToAutofill === undefined) {
+        throw new Error(
+          `Mapping successful (${path}), but no value found in resume data.`
+        );
+      }
 
-    // --- FR 3.3: Cover Letter Generation Workflow ---
-    const handleGenerateCoverLetter = async () => {
-        setLoading(true);
-        setResult(null);
-        setError(null);
-        try {
-            // Message Service Worker to perform LLM Cover Letter Generation
-            const serviceWorkerResponse = await chrome.runtime.sendMessage({
-                action: 'GENERATE_COVER_LETTER',
-                data: {
-                    jobDescription: MOCK_JOB_DESCRIPTION,
-                    jsonResume: MOCK_RESUME,
-                    relevanceScores: MOCK_RELEVANCE_SCORES
-                }
-            });
+      // 3. FR 2.3: Send final autofill command to Content Script
+      await chrome.tabs.sendMessage(tab.id, {
+        action: "PERFORM_AUTOFILL",
+        path: path,
+        value: valueToAutofill, // <-- UPDATED
+      });
 
-            if (serviceWorkerResponse.status === 'error') {
-                throw new Error(serviceWorkerResponse.message);
-            }
+      setResult(
+        `✅ Mapped to: ${path}. MOCK Autofill (value: ${valueToAutofill}) executed! Check the webpage alert.` // <-- UPDATED
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            // FR 3.4: Display the draft cover letter
-            setResult(serviceWorkerResponse.coverLetter);
+  // --- FR 3.3: Cover Letter Generation Workflow ---
+  const handleGenerateCoverLetter = async () => {
+    setLoading(true);
+    setResult(null);
+    setError(null);
+    try {
+      // Message Service Worker to perform LLM Cover Letter Generation
+      const serviceWorkerResponse = await chrome.runtime.sendMessage({
+        action: "GENERATE_COVER_LETTER",
+        data: {
+          jobDescription: MOCK_JOB_DESCRIPTION,
+          jsonResume: MOCK_RESUME,
+          relevanceScores: MOCK_RELEVANCE_SCORES,
+        },
+      });
 
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+      if (serviceWorkerResponse.status === "error") {
+        throw new Error(serviceWorkerResponse.message);
+      }
 
-    return (
-        <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 2, width: 300 }}>
-            <Typography variant="h5" color="primary">AI Strategist</Typography>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Test Core Features (Backend: http://localhost:3000)
-            </Typography>
+      // FR 3.4: Display the draft cover letter
+      setResult(serviceWorkerResponse.coverLetter);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            <Button 
-                variant="contained" 
-                fullWidth 
-                onClick={handleSemanticAnalysis} 
-                disabled={loading}
-            >
-                {loading ? <CircularProgress size={24} /> : '1. Test Semantic Autofill (FR 2.2)'}
-            </Button>
-            
-            <Button 
-                variant="outlined" 
-                fullWidth 
-                onClick={handleGenerateCoverLetter} 
-                disabled={loading}
-            >
-                {loading ? <CircularProgress size={24} /> : '2. Test Cover Letter Gen (FR 3.3)'}
-            </Button>
+  return (
+    <Box
+      sx={{
+        p: 2,
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        gap: 1.5,
+        width: 300,
+      }}
+    >
+      <Typography variant="h5" color="primary">
+        Job Application Extension
+      </Typography>
+      {/* <Typography variant="subtitle2" sx={{ mb: 1 }}>
+        Test Core Features (Backend: http://localhost:3000)
+      </Typography> */}
+      <UserDataOverview
+        onSemanticAnalysis={handleSemanticAnalysis}
+        onGenerateCoverLetter={handleGenerateCoverLetter}
+        isLoading={loading}
+      />
 
-            <Paper elevation={3} sx={{ p: 2, mt: 2, overflowY: 'auto', flexGrow: 1, backgroundColor: 'background.default' }}>
-                <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                    Output:
-                </Typography>
-                
-                {error && (
-                    <Typography color="error" variant="body2">
-                        ERROR: {error}
-                    </Typography>
-                )}
-                
-                {result && (
-                    <TextField
-                        fullWidth
-                        multiline
-                        minRows={4}
-                        maxRows={12}
-                        value={result}
-                        variant="outlined"
-                        InputProps={{ readOnly: true }}
-                        sx={{ mt: 1 }}
-                    />
-                )}
-            </Paper>
-        </Box>
+      {/* REMOVED: The two buttons for Semantic Autofill and Cover Letter Gen
+          is now inside UserDataOverview as per the new reference image. 
+          The logic (handleSemanticAnalysis / handleGenerateCoverLetter) 
+          is not being used by the UI at this point, which is expected 
+          since we are only focusing on design now. */}
+
+      <Paper
+        elevation={3}
+        sx={{
+          p: 2,
+          overflowY: "auto",
+          flexGrow: 1,
+          backgroundColor: "background.default",
+        }}
+      >
+        <Typography variant="body2" sx={{ mb: 1, fontWeight: "bold" }}>
+          Output:
+        </Typography>
+
+        {error && (
+          <Typography color="error" variant="body2">
+            ERROR: {error}
+          </Typography>
+        )}
+
+        {result && (
+          <TextField
+            fullWidth
+            multiline
+            minRows={4}
+            maxRows={12}
+            value={result}
+            variant="outlined"
+            InputProps={{ readOnly: true }}
+            sx={{ mt: 1 }}
+          />
+        )}
+      </Paper>
+
+      {/* NOTE: If you need to re-enable the functionality testing buttons 
+          (1. Test Semantic Autofill and 2. Test Cover Letter Gen) 
+          in the future, they should be placed here, below the UserDataOverview 
+          and above the Output Panel, as they were originally. 
+          For now, they are removed to match the reference image's layout 
+          that puts "Autofill Form" and "Generate Cover Letter" inside 
+          the UserDataOverview card. */}
+    </Box>
+  );
+}
+</file>
+
+<file path="src/components/UserDataOverview.jsx">
+import React, { useState, useRef, useEffect, useCallback } from "react"; // <-- UPDATED: Added useEffect, useCallback
+import {
+  Box,
+  Typography,
+  Grid,
+  IconButton,
+  Paper,
+  Button,
+  Divider,
+  Snackbar,
+  Alert,
+  TextField,
+  Chip,
+  CircularProgress,
+} from "@mui/material";
+import {
+  ContentCopy,
+  DeleteOutline,
+  CloudUpload,
+  Check,
+  DragIndicator,
+  Description,
+  Edit,
+  Person,
+  Email,
+  Phone,
+  LocationOn,
+  LinkedIn,
+  Language,
+  Work,
+  EmojiEvents,
+  Save,
+} from "@mui/icons-material";
+
+// Key for chrome.storage.local
+const STORAGE_KEY = "ais_userData"; // <-- ADDED
+
+// Initial empty user data
+const initialUserData = {
+  personalInfo: {
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    city: "",
+    state: "",
+    country: "",
+    linkedinUrl: "",
+    portfolioUrl: "",
+    currentTitle: "",
+    yearsExperience: "",
+  },
+  cvs: [],
+};
+
+// CV File Display Component
+const CvFileDisplay = ({ fileName, onDelete }) => {
+  // ... (CvFileDisplay component remains unchanged)
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <Box
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", fileName);
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      sx={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        p: 1.5,
+        borderRadius: 2,
+        bgcolor: "rgba(255, 255, 255, 0.95)",
+        border: "2px solid rgba(187, 134, 252, 0.3)",
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        cursor: "grab",
+        minWidth: 85,
+        maxWidth: 110,
+        minHeight: 120,
+        "&:hover": {
+          transform: "translateY(-4px)",
+          boxShadow: "0 8px 16px rgba(187, 134, 252, 0.3)",
+          border: "2px solid #bb86fc",
+          cursor: "grab",
+        },
+        "&:active": {
+          cursor: "grabbing",
+        },
+      }}
+    >
+      <Box
+        sx={{
+          position: "absolute",
+          top: 4,
+          right: 4,
+          opacity: isHovered ? 1 : 0,
+          transition: "opacity 0.2s",
+        }}
+      >
+        <DragIndicator sx={{ fontSize: 14, color: "#bb86fc" }} />
+      </Box>
+
+      {isHovered && (
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          sx={{
+            position: "absolute",
+            top: 4,
+            left: 4,
+            bgcolor: "rgba(244, 67, 54, 0.9)",
+            color: "white",
+            width: 18,
+            height: 18,
+            padding: 0,
+            "&:hover": {
+              bgcolor: "rgba(211, 47, 47, 1)",
+            },
+          }}
+        >
+          <DeleteOutline sx={{ fontSize: 12 }} />
+        </IconButton>
+      )}
+
+      <Description
+        sx={{
+          fontSize: 40,
+          color: "#bb86fc",
+          mb: 0.5,
+          filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.1))",
+        }}
+      />
+
+      <Typography
+        variant="caption"
+        sx={{
+          color: "rgba(0, 0, 0, 0.87)",
+          textAlign: "center",
+          lineHeight: 1.2,
+          maxWidth: "100%",
+          display: "block",
+          overflow: "visible",
+          fontSize: "0.65rem",
+          fontWeight: 500,
+          wordBreak: "break-word",
+        }}
+      >
+        {fileName}
+      </Typography>
+    </Box>
+  );
+};
+
+// Upload Zone Component
+const UploadZone = ({ onFilesAdded }) => {
+  // ... (UploadZone component remains unchanged)
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
+  const dragCounter = useRef(0);
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+
+    const files = Array.from(e.dataTransfer.files).filter(
+      (file) => file.type === "application/pdf"
     );
+
+    if (files.length > 0) {
+      onFilesAdded(files);
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files).filter(
+      (file) => file.type === "application/pdf"
+    );
+    if (files.length > 0) {
+      onFilesAdded(files);
+    }
+  };
+
+  return (
+    <Box
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onClick={() => fileInputRef.current?.click()}
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        p: 1.5,
+        borderRadius: 2,
+        bgcolor: isDragging
+          ? "rgba(187, 134, 252, 0.2)"
+          : "rgba(255, 255, 255, 0.95)",
+        border: isDragging
+          ? "2px dashed #bb86fc"
+          : "2px dashed rgba(187, 134, 252, 0.4)",
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        cursor: "pointer",
+        minWidth: 85,
+        maxWidth: 110,
+        minHeight: 120,
+        "&:hover": {
+          bgcolor: "rgba(187, 134, 252, 0.15)",
+          border: "2px dashed #bb86fc",
+          transform: "translateY(-2px)",
+        },
+      }}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,application/pdf"
+        multiple
+        style={{ display: "none" }}
+        onChange={handleFileSelect}
+      />
+      <CloudUpload
+        sx={{
+          fontSize: 36,
+          color: "#bb86fc",
+          mb: 0.5,
+          opacity: isDragging ? 1 : 0.7,
+        }}
+      />
+      <Typography
+        variant="caption"
+        sx={{
+          color: "rgba(0, 0, 0, 0.6)",
+          textAlign: "center",
+          fontSize: "0.65rem",
+          fontWeight: 500,
+        }}
+      >
+        {isDragging ? "Drop" : "Add PDF"}
+      </Typography>
+    </Box>
+  );
+};
+
+// Compact Editable Info Field Component
+const CompactInfoField = ({
+  icon: Icon,
+  value,
+  onChange,
+  placeholder,
+  multiline = false,
+  onCopySuccess,
+}) => {
+  // ... (CompactInfoField component remains unchanged)
+  const [isEditing, setIsEditing] = useState(false);
+
+  const handleCopy = (e) => {
+    e.stopPropagation();
+    if (value) {
+      navigator.clipboard.writeText(value);
+      onCopySuccess(`${placeholder.replace(" *", "")} copied!`);
+    }
+  };
+
+  return (
+    <Box
+      onClick={isEditing ? undefined : () => setIsEditing(true)} // CHANGED: Moved onClick here to make the entire box clickable when not editing
+      sx={{
+        display: "flex",
+        alignItems: multiline ? "flex-start" : "center",
+        gap: 0.75,
+        bgcolor: "rgba(255, 255, 255, 0.95)",
+        borderRadius: 1.5,
+        p: 1,
+        transition: "all 0.2s",
+        cursor: isEditing ? "default" : "pointer",
+        minHeight: 36,
+        "&:hover": {
+          boxShadow: isEditing ? "none" : "0 2px 8px rgba(0,0,0,0.1)",
+        },
+      }}
+    >
+      <Icon
+        sx={{
+          color: "#bb86fc",
+          fontSize: 18,
+          mt: multiline ? 0.5 : 0,
+          flexShrink: 0,
+        }}
+      />
+      {isEditing ? (
+        <TextField
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => setIsEditing(false)}
+          autoFocus
+          placeholder={placeholder}
+          multiline={multiline}
+          rows={multiline ? 2 : 1}
+          size="small"
+          fullWidth
+          sx={{
+            "& .MuiOutlinedInput-root": {
+              fontSize: "0.75rem",
+              padding: "4px 8px",
+              "& fieldset": {
+                borderColor: "#bb86fc",
+              },
+              "& input, & textarea": {
+                padding: "4px 8px",
+                lineHeight: 1.3,
+                color: "rgba(0, 0, 0, 0.87)",
+              },
+            },
+          }}
+        />
+      ) : (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            flexGrow: 1,
+            // CHANGED: Use a constrained layout with space-between to always keep the copy button visible
+            justifyContent: "space-between",
+            minHeight: 20,
+            width: "100%", // Ensure the box takes full width
+          }}
+        >
+          <Typography
+            // REMOVED: onClick={() => setIsEditing(true)} - it is now on the parent Box
+            sx={{
+              // CHANGED: Explicitly set max-width for the text area
+              maxWidth: value ? "calc(100% - 28px)" : "100%", // Space for icon (24px) + gap (4px)
+              fontSize: "0.75rem",
+              color: value ? "rgba(0, 0, 0, 0.87)" : "rgba(0, 0, 0, 0.4)",
+              fontWeight: 500,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              lineHeight: 1.3,
+              cursor: "inherit", // CHANGED: Use inherit to allow the 'pointer' from the parent Box to take effect
+              flexShrink: 1, // Allow text to shrink
+              ...(multiline
+                ? { whiteSpace: "normal", wordBreak: "break-word" }
+                : { whiteSpace: "nowrap" }),
+            }}
+          >
+            {value || placeholder}
+          </Typography>
+          {/* Copy Button */}
+          {value && (
+            <IconButton
+              size="small"
+              onClick={handleCopy}
+              sx={{
+                p: 0,
+                color: "#bb86fc",
+                "&:hover": { bgcolor: "rgba(187, 134, 252, 0.1)" },
+                flexShrink: 0, // Prevent button from shrinking
+                marginLeft: 0.5, // Add a small margin
+              }}
+              title={`Copy ${placeholder.replace(" *", "")}`}
+            >
+              <ContentCopy sx={{ fontSize: 14 }} />
+            </IconButton>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+export function UserDataOverview({
+  onSemanticAnalysis,
+  onGenerateCoverLetter,
+  isLoading,
+}) {
+  const [userData, setUserData] = useState(initialUserData);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
+
+  // --- PERSISTENCE LOGIC START ---
+
+  // Effect to load initial user data from storage
+  useEffect(() => {
+    if (chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get([STORAGE_KEY], (result) => {
+        if (result[STORAGE_KEY]) {
+          setUserData(result[STORAGE_KEY]);
+        }
+      });
+    }
+  }, []);
+
+  // Function to save data to storage
+  const saveUserData = useCallback((data) => {
+    if (chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ [STORAGE_KEY]: data }, () => {
+        // console.log("User data saved to local storage.");
+      });
+    }
+  }, []);
+
+  // Effect to save user data whenever it changes
+  useEffect(() => {
+    saveUserData(userData);
+  }, [userData, saveUserData]);
+
+  // --- PERSISTENCE LOGIC END ---
+
+  const handleFilesAdded = (files) => {
+    const newFiles = files.map((file) => file.name);
+    setUserData((prev) => ({
+      ...prev,
+      cvs: [...prev.cvs, ...newFiles],
+    }));
+    setSnackbar({
+      open: true,
+      message: `${files.length} file(s) added!`,
+      severity: "success",
+    });
+  };
+
+  const handleDeleteCv = (fileName) => {
+    setUserData((prev) => ({
+      ...prev,
+      cvs: prev.cvs.filter((cv) => cv !== fileName),
+    }));
+    setSnackbar({
+      open: true,
+      message: "File removed!",
+      severity: "info",
+    });
+  };
+
+  const updatePersonalInfo = (field, value) => {
+    // When personal info is updated, we update the state AND the storage via the useEffect/saveUserData flow
+    setUserData((prev) => ({
+      ...prev,
+      personalInfo: {
+        ...prev.personalInfo,
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleAutofill = () => {
+    // LinkedIn URL is now in the required section, check it too.
+    const { firstName, lastName, email, phone, linkedinUrl } =
+      userData.personalInfo;
+    if (!firstName || !lastName || !email || !phone || !linkedinUrl) {
+      setSnackbar({
+        open: true,
+        // UPDATED message to include LinkedIn
+        message:
+          "Please fill required fields (Name, Email, Phone, LinkedIn URL)",
+        severity: "warning",
+      });
+      return;
+    }
+
+    // NEW: Call the feature handler passed from SidePanelApp
+    onSemanticAnalysis();
+
+    setSnackbar({
+      open: true,
+      message:
+        "Validation passed. Attempting semantic analysis and autofill...",
+      severity: "info",
+    });
+  };
+
+  const handleCopySuccess = (message) => {
+    setSnackbar({
+      open: true,
+      message: message,
+      severity: "success",
+    });
+  };
+
+  return (
+    <>
+      <Paper
+        elevation={3}
+        sx={{
+          p: 2,
+          borderRadius: 3,
+          background: "linear-gradient(145deg, #e9a6e3 0%, #bb86fc 100%)",
+          border: "none",
+          color: "rgba(0, 0, 0, 0.87)",
+          width: 400,
+          maxWidth: 480,
+          mx: "auto",
+        }}
+      >
+        {/* Personal Information Section */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+          <Person sx={{ color: "rgba(0, 0, 0, 0.87)", fontSize: 20 }} />
+          <Typography
+            variant="subtitle1"
+            sx={{ fontWeight: 700, fontSize: "0.95rem" }}
+          >
+            Personal Information
+          </Typography>
+        </Box>
+
+        {/* Important & Required Fields Label */}
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 700,
+            fontSize: "0.75rem",
+            display: "block",
+            mb: 0.5,
+          }}
+        >
+          Important & Required Fields
+        </Typography>
+
+        <Grid container spacing={1} sx={{ mb: 2 }}>
+          {/* Row 1: First & Last Name (Required) */}
+          <Grid item xs={6}>
+            <CompactInfoField
+              icon={Person}
+              value={userData.personalInfo.firstName}
+              onChange={(val) => updatePersonalInfo("firstName", val)}
+              placeholder="First Name *"
+              onCopySuccess={handleCopySuccess}
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <CompactInfoField
+              icon={Person}
+              value={userData.personalInfo.lastName}
+              onChange={(val) => updatePersonalInfo("lastName", val)}
+              placeholder="Last Name *"
+              onCopySuccess={handleCopySuccess}
+            />
+          </Grid>
+
+          {/* Row 2: Email & Phone (Required) */}
+          <Grid item xs={12}>
+            <CompactInfoField
+              icon={Email}
+              value={userData.personalInfo.email}
+              onChange={(val) => updatePersonalInfo("email", val)}
+              placeholder="Email *"
+              onCopySuccess={handleCopySuccess}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <CompactInfoField
+              icon={Phone}
+              value={userData.personalInfo.phone}
+              onChange={(val) => updatePersonalInfo("phone", val)}
+              placeholder="Phone *"
+              onCopySuccess={handleCopySuccess}
+            />
+          </Grid>
+
+          {/* Row 3: LinkedIn URL (REQUIRED) */}
+          <Grid item xs={12}>
+            <CompactInfoField
+              icon={LinkedIn}
+              value={userData.personalInfo.linkedinUrl}
+              onChange={(val) => updatePersonalInfo("linkedinUrl", val)}
+              placeholder="LinkedIn URL *"
+              onCopySuccess={handleCopySuccess}
+            />
+          </Grid>
+        </Grid>
+
+        {/* Optional Fields Label */}
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 700,
+            fontSize: "0.75rem",
+            display: "block",
+            mb: 0.5,
+          }}
+        >
+          Optional Fields (Enhance Autofill)
+        </Typography>
+
+        <Grid container spacing={1} sx={{ mb: 2 }}>
+          {/* Row 1: City & Country */}
+          <Grid item xs={6}>
+            <CompactInfoField
+              icon={LocationOn}
+              value={userData.personalInfo.city}
+              onChange={(val) => updatePersonalInfo("city", val)}
+              placeholder="City"
+              onCopySuccess={handleCopySuccess}
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <CompactInfoField
+              icon={LocationOn}
+              value={userData.personalInfo.country}
+              onChange={(val) => updatePersonalInfo("country", val)}
+              placeholder="Country"
+              onCopySuccess={handleCopySuccess}
+            />
+          </Grid>
+
+          {/* Row 2: Portfolio */}
+          <Grid item xs={6}>
+            <CompactInfoField
+              icon={Language}
+              value={userData.personalInfo.portfolioUrl}
+              onChange={(val) => updatePersonalInfo("portfolioUrl", val)}
+              placeholder="Portfolio"
+              onCopySuccess={handleCopySuccess}
+            />
+          </Grid>
+          <Grid item xs={6}>
+            {/* Empty slot for balance */}
+          </Grid>
+
+          {/* Row 3: Job Title & Experience */}
+          <Grid item xs={7}>
+            {" "}
+            {/* CHANGED: Reduced width to xs={7} */}
+            <CompactInfoField
+              icon={Work}
+              value={userData.personalInfo.currentTitle}
+              onChange={(val) => updatePersonalInfo("currentTitle", val)}
+              placeholder="Current Job Title"
+              onCopySuccess={handleCopySuccess}
+            />
+          </Grid>
+          <Grid item xs={5}>
+            {" "}
+            {/* CHANGED: Increased width to xs={5} */}
+            <CompactInfoField
+              icon={EmojiEvents}
+              value={userData.personalInfo.yearsExperience}
+              onChange={(val) => updatePersonalInfo("yearsExperience", val)}
+              placeholder="Years"
+              onCopySuccess={handleCopySuccess}
+            />
+          </Grid>
+        </Grid>
+
+        <Divider sx={{ my: 2, borderColor: "rgba(255, 255, 255, 0.3)" }} />
+
+        {/* Resumes/CVs Section */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+          <Description sx={{ color: "rgba(0, 0, 0, 0.87)", fontSize: 20 }} />
+          <Typography
+            variant="subtitle1"
+            sx={{ fontWeight: 700, fontSize: "0.95rem" }}
+          >
+            Resumes/CVs
+          </Typography>
+          <Chip
+            label={userData.cvs.length}
+            size="small"
+            sx={{
+              bgcolor: "rgba(255, 255, 255, 0.9)",
+              fontWeight: 700,
+              fontSize: "0.65rem",
+              height: 20,
+              color: "rgba(0, 0, 0, 0.87)",
+            }}
+          />
+        </Box>
+
+        {/* {userData.cvs.length === 0 && (
+          <Box
+            sx={{
+              textAlign: "center",
+              py: 1.5,
+              mb: 1.5,
+              bgcolor: "rgba(255, 255, 255, 0.5)",
+              borderRadius: 2,
+              border: "2px dashed rgba(187, 134, 252, 0.5)",
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{ color: "rgba(0, 0, 0, 0.6)", fontSize: "0.7rem" }}
+            >
+              No resumes uploaded yet. Click below to add!
+            </Typography>
+          </Box>
+        )} */}
+
+        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", mb: 2 }}>
+          {userData.cvs.map((fileName, index) => (
+            <CvFileDisplay
+              key={index}
+              fileName={fileName}
+              onDelete={() => handleDeleteCv(fileName)}
+            />
+          ))}
+          <UploadZone onFilesAdded={handleFilesAdded} />
+        </Box>
+
+        {/* Action Buttons */}
+        <Grid container spacing={1.5}>
+          <Grid item xs={12}>
+            <Button
+              variant="contained"
+              fullWidth
+              startIcon={
+                isLoading ? undefined : <Check sx={{ fontSize: 16 }} />
+              }
+              onClick={handleAutofill}
+              disabled={isLoading}
+              sx={{
+                bgcolor: "#9c27b0",
+                fontWeight: 600,
+                py: 1,
+                borderRadius: 2,
+                color: "white",
+                textTransform: "none",
+                fontSize: "0.8rem",
+                boxShadow: "0 4px 12px rgba(156, 39, 176, 0.3)",
+                "&:hover": {
+                  bgcolor: "#7b1fa2",
+                  transform: "translateY(-2px)",
+                  boxShadow: "0 6px 16px rgba(156, 39, 176, 0.4)",
+                },
+                transition: "all 0.3s",
+                position: "relative",
+              }}
+            >
+              {isLoading ? (
+                <CircularProgress
+                  color="inherit"
+                  size={20}
+                  sx={{ color: "white" }}
+                />
+              ) : (
+                "Autofill Form"
+              )}
+            </Button>
+          </Grid>
+          <Grid item xs={12}>
+            <Button
+              variant="outlined"
+              fullWidth
+              startIcon={
+                isLoading ? undefined : <Description sx={{ fontSize: 16 }} />
+              }
+              onClick={onGenerateCoverLetter}
+              disabled={isLoading}
+              sx={{
+                bgcolor: "rgba(255, 255, 255, 0.95)",
+
+                color: "#9c27b0",
+                border: "2px solid rgba(156, 39, 176, 0.3)",
+                fontWeight: 600,
+                py: 1,
+                borderRadius: 2,
+                textTransform: "none",
+                fontSize: "0.8rem",
+                "&:hover": {
+                  bgcolor: "white",
+                  border: "2px solid #9c27b0",
+                  transform: "translateY(-2px)",
+                  boxShadow: "0 4px 12px rgba(156, 39, 176, 0.2)",
+                },
+                transition: "all 0.3s",
+              }}
+            >
+              {isLoading ? (
+                <CircularProgress
+                  color="inherit"
+                  size={20}
+                  sx={{ color: "#9c27b0" }}
+                />
+              ) : (
+                "Generate Cover Letter"
+              )}
+            </Button>
+          </Grid>
+        </Grid>
+
+        {/* Quick Tip */}
+        <Box
+          sx={{
+            mt: 1.5,
+            p: 1.5,
+            bgcolor: "rgba(255, 255, 255, 0.3)",
+            borderRadius: 2,
+            border: "1px solid rgba(255, 255, 255, 0.5)",
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              color: "rgba(0, 0, 0, 0.7)",
+              fontSize: "0.7rem",
+              display: "block",
+              lineHeight: 1.4,
+            }}
+          >
+            💡 <strong>Quick Tip:</strong> Fill in your info once, autofill any
+            job application! Click any field to edit. Fields with * are
+            required.
+          </Typography>
+        </Box>
+      </Paper>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{
+            width: "100%",
+            borderRadius: 2,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </>
+  );
 }
 </file>
 
 <file path="src/content-script/content.js">
-console.log('Content Script Loaded on page.');
+console.log("Content Script Loaded on page.");
 
 // FR 2.1: Mock function to extract form field data
 function getMockFormFieldData() {
-    // In a real implementation, you'd scan the DOM for the active input field
-    // and extract its label, placeholder, name, and surrounding context.
-    return { 
-        label: "Primary Phone Number", 
-        placeholder: "e.g. 555-123-4567", 
-        dom_path: "/html/body/form/input[3]" 
-    };
+  // In a real implementation, you'd scan the DOM for the active input field
+  // and extract its label, placeholder, name, and surrounding context.
+  return {
+    label: "Primary Email Address", // <-- CHANGED
+    placeholder: "e.g. john.doe@example.com", // <-- CHANGED
+    dom_path: "/html/body/form/input[3]",
+  };
 }
 
 // Listener for messages from the Side Panel / Service Worker
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // The Side Panel will message the Content Script to get form data
-    if (request.action === 'GET_FORM_FIELD_DATA') {
-        const formData = getMockFormFieldData();
-        sendResponse({ status: 'success', formData });
-        return true; // Keep the message channel open for async response
-    }
-    
-    // The Side Panel will message the Content Script to perform autofill
-    if (request.action === 'PERFORM_AUTOFILL') {
-        // FR 2.3: In a real app, this would inject a value into a specific selector
-        console.log(`Content Script: MOCK Autofill executed for path: ${request.path} with value: ${request.value}`);
-        alert(`MOCK Autofill: Injected '${request.value}' into the field mapped to '${request.path}'.`);
-        sendResponse({ status: 'success' });
-        return true;
-    }
+  // The Side Panel will message the Content Script to get form data
+  if (request.action === "GET_FORM_FIELD_DATA") {
+    const formData = getMockFormFieldData();
+    sendResponse({ status: "success", formData });
+    return true; // Keep the message channel open for async response
+  }
+
+  // The Side Panel will message the Content Script to perform autofill
+  if (request.action === "PERFORM_AUTOFILL") {
+    // FR 2.3: In a real app, this would inject a value into a specific selector
+    console.log(
+      `Content Script: MOCK Autofill executed for path: ${request.path} with value: ${request.value}`
+    );
+    alert(
+      `MOCK Autofill: Injected '${request.value}' into the field mapped to '${request.path}'.`
+    );
+    sendResponse({ status: "success" });
+    return true;
+  }
 });
 
 // Optional: Open side panel when action is received from service worker (see background.js)
-chrome.runtime.onMessage.addListener((request) => {
-    if (request.action === 'OPEN_SIDEPANEL') {
-        // This is necessary because service workers cannot open the side panel directly, 
-        // they must use an action that is handled by a visible part of the extension (like the content script).
-        chrome.runtime.sendMessage({ action: 'OPEN_SIDEPANEL' });
-    }
-});
+// REMOVED the redundant OPEN_SIDEPANEL message listener
 </file>
 
 <file path="src/main.jsx">
@@ -491,62 +1413,73 @@ createRoot(document.getElementById("root")).render(
 </file>
 
 <file path="src/service-worker/background.js">
-import { authenticatedFetch } from '../api'; 
+import { authenticatedFetch } from "../api";
 
 // Listener for messages from the Content Script or Side Panel
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // Return true to indicate that the response will be sent asynchronously
-    let handled = false; 
+  // Return true to indicate that the response will be sent asynchronously
+  let handled = false;
 
-    // --- Core Feature 1: Semantic Analysis (FR 2.2) ---
-    if (request.action === 'SEMANTIC_ANALYSIS') {
-        const { formFieldData } = request.data;
-        
-        authenticatedFetch('/api/llm/semantic-analysis', { formFieldData })
-            .then(response => {
-                console.log('Semantic Analysis Result:', response.mapping);
-                sendResponse({ status: 'success', mapping: response.mapping });
-            })
-            .catch(error => {
-                console.error('Semantic Analysis Failed:', error);
-                sendResponse({ status: 'error', message: error.message });
-            });
-        handled = true;
-    } 
-    
-    // --- Core Feature 2: Generate Cover Letter (FR 3.3) ---
-    else if (request.action === 'GENERATE_COVER_LETTER') {
-        const { jobDescription, jsonResume, relevanceScores } = request.data;
+  // --- Core Feature 1: Semantic Analysis (FR 2.2) ---
+  if (request.action === "SEMANTIC_ANALYSIS") {
+    const { formFieldData } = request.data;
 
-        authenticatedFetch('/api/llm/generate-cover-letter', { jobDescription, jsonResume, relevanceScores })
-            .then(response => {
-                console.log('Cover Letter Generated:', response.coverLetter);
-                sendResponse({ status: 'success', coverLetter: response.coverLetter });
-            })
-            .catch(error => {
-                console.error('Cover Letter Generation Failed:', error);
-                sendResponse({ status: 'error', message: error.message });
-            });
-        handled = true;
-    }
-    
-    // Set up Side Panel on action icon click (MV3 requirement)
-    if (request.action === 'OPEN_SIDEPANEL') {
-        chrome.sidePanel.open({ tabId: sender.tab.id });
-    }
+    authenticatedFetch("/api/llm/semantic-analysis", { formFieldData })
+      .then((response) => {
+        console.log("Semantic Analysis Result:", response.mapping);
+        sendResponse({ status: "success", mapping: response.mapping });
+      })
+      .catch((error) => {
+        console.error("Semantic Analysis Failed:", error);
+        sendResponse({ status: "error", message: error.message });
+      });
+    handled = true;
+  }
 
+  // --- Core Feature 2: Generate Cover Letter (FR 3.3) ---
+  else if (request.action === "GENERATE_COVER_LETTER") {
+    const { jobDescription, jsonResume, relevanceScores } = request.data;
 
-    return handled;
+    authenticatedFetch("/api/llm/generate-cover-letter", {
+      jobDescription,
+      jsonResume,
+      relevanceScores,
+    })
+      .then((response) => {
+        console.log("Cover Letter Generated:", response.coverLetter);
+        sendResponse({ status: "success", coverLetter: response.coverLetter });
+      })
+      .catch((error) => {
+        console.error("Cover Letter Generation Failed:", error);
+        sendResponse({ status: "error", message: error.message });
+      });
+    handled = true;
+  }
+
+  return handled;
 });
 
 // Set the side panel to be open when the extension icon is clicked
 chrome.action.onClicked.addListener(async (tab) => {
-    await chrome.sidePanel.setOptions({
-        tabId: tab.id,
-        enabled: true
-    });
-    // Message the current tab to open the side panel
-    chrome.tabs.sendMessage(tab.id, { action: 'OPEN_SIDEPANEL' });
+  // NEW: Check for common restricted Chrome URLs
+  const url = tab.url;
+  if (url.startsWith("chrome://") || url.startsWith("chrome-extension://")) {
+    console.warn(
+      "Side panel cannot be opened on this page (Restricted Chrome URL)."
+    );
+    // The most common cause of "No active side panel for tabid" is clicking
+    // the icon on a page like chrome://extensions. We block the API call here.
+    return;
+  }
+
+  // 1. Enable side panel for the active tab
+  chrome.sidePanel.setOptions({
+    tabId: tab.id,
+    enabled: true,
+  });
+
+  // 2. Open the side panel
+  await chrome.sidePanel.open({ tabId: tab.id });
 });
 
 console.log("Service Worker Initialized");
@@ -555,6 +1488,7 @@ console.log("Service Worker Initialized");
 <file path="src/sidepanel/index.jsx">
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+
 import { SidePanelApp } from '../components/SidePanelApp';
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import '../styles.css';
@@ -600,74 +1534,52 @@ body {
 }
 </file>
 
-<file path="tsconfig.node.json">
-{
-  "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
-    "target": "ES2023",
-    "lib": ["ES2023"],
-    "module": "ESNext",
-    "types": ["node"],
-    "skipLibCheck": true,
-
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-
-    /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
-  },
-  "include": ["vite.config.ts"]
-}
-</file>
-
 <file path="vite.config.js">
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import { resolve } from 'path';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { resolve } from "path";
 
-// This is a minimal config. For a production extension, you would use 
-// a dedicated plugin like `vite-plugin-web-extension` for robust multi-entry handling.
+// This is the multi-entry configuration required for a Chrome Extension (MV3)
 export default defineConfig({
   plugins: [react()],
-  root: resolve(__dirname, 'src/sidepanel'),
+
+  // The public directory should be correctly resolved for assets like manifest.json
+  // It is generally safer to let publicDir default to 'public'
+  publicDir: "public",
+
   build: {
-    outDir: resolve(__dirname, 'dist'),
+    outDir: resolve(__dirname, "dist"),
     emptyOutDir: true,
+
     rollupOptions: {
       input: {
-        sidepanel: resolve(__dirname, 'public/index.html'),
-        // Explicitly list the JS files for the Service Worker and Content Script
-        // This ensures they are bundled/copied to 'dist'
-        'src/service-worker/background': resolve(__dirname, 'src/service-worker/background.js'),
-        'src/content-script/content': resolve(__dirname, 'src/content-script/content.js'),
+        // 1. Side Panel HTML (The main React UI)
+        sidepanel: resolve(__dirname, "index.html"), // <--- CHANGED: Point to the root index.html
+
+        // 2. Service Worker JS
+        background: resolve(__dirname, "src/service-worker/background.js"),
+
+        // 3. Content Script JS
+        content: resolve(__dirname, "src/content-script/content.js"),
       },
       output: {
-        // Keeps the Service Worker and Content Script at the root of 'dist'
+        // This logic ensures the Service Worker and Content Script files
+        // land in the correct relative path for the manifest.json to find them.
         entryFileNames: (assetInfo) => {
-            if (assetInfo.name.includes('service-worker')) {
-                return 'src/service-worker/background.js';
-            }
-            if (assetInfo.name.includes('content-script')) {
-                return 'src/content-script/content.js';
-            }
-            return `assets/[name]-[hash].js`;
+          if (assetInfo.name === "background") {
+            return "src/service-worker/background.js";
+          }
+          if (assetInfo.name === "content") {
+            return "src/content-script/content.js";
+          }
+          // All other JS (including the sidepanel's main script) goes into assets
+          return "assets/[name]-[hash].js";
         },
-        chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name].[ext]',
+        chunkFileNames: "assets/[name]-[hash].js",
+        assetFileNames: "assets/[name].[ext]",
       },
     },
   },
-  // Ensure the public directory is used for assets like manifest.json
-  publicDir: resolve(__dirname, 'public'),
 });
 </file>
 
