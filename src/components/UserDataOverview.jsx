@@ -57,19 +57,32 @@ const initialUserData = {
 const CvFileDisplay = ({ fileName, onDelete }) => {
   // ... (CvFileDisplay component remains unchanged)
   const [isHovered, setIsHovered] = useState(false);
+  const cvFileRef = useRef(null); // ADDED: Ref to the Box element for drag image
 
   return (
     <Box
+      ref={cvFileRef} // ADDED: Attach ref
       draggable
       onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = "copy"; // CHANGED: Changed from "move" to "copy"
+        e.dataTransfer.effectAllowed = "copy";
+
+        // 1. Plain Text data
         e.dataTransfer.setData("text/plain", fileName);
-        // ADDED: Set a data URI to signal to the browser that this is a PDF file being dragged.
-        // This is crucial for external drop targets (like Gmail/forms) to recognize it as a file-like drag.
-        e.dataTransfer.setData(
-          "text/uri-list",
-          `data:application/pdf;name=${encodeURIComponent(fileName)}`
-        );
+
+        // 2. Set DownloadURL: This is the critical, Chrome-specific method
+        // Format: MIME-type:URL:filename
+        // We use a mock data URL. If a real file was stored (e.g., as a Blob in IndexedDB/storage),
+        // we would use chrome.runtime.getURL() to point to a temporary file accessible by the extension.
+        // For MVP, the mock data URL must suffice as a signal.
+        const mockDataUri = `data:application/pdf;base64,`;
+        const downloadUrlValue = `application/pdf:${mockDataUri}:${fileName}`;
+        e.dataTransfer.setData("DownloadURL", downloadUrlValue); // RE-CONFIRMED: This is the best approach.
+
+        // 3. Set a custom drag image to improve UX (optional but good practice)
+        if (cvFileRef.current) {
+          // ADDED: Set custom drag image
+          e.dataTransfer.setDragImage(cvFileRef.current, 50, 50);
+        }
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

@@ -57,14 +57,25 @@ chrome.action.onClicked.addListener(async (tab) => {
     return;
   }
 
-  // 1. Enable side panel for the active tab
-  chrome.sidePanel.setOptions({
-    tabId: tab.id,
-    enabled: true,
-  });
+  // UPDATED: Added try...catch block to handle the promise rejection
+  // that occurs when opening the side panel on a restricted page
+  // that wasn't caught by the initial URL check.
+  try {
+    // 1. Enable side panel for the active tab
+    chrome.sidePanel.setOptions({
+      tabId: tab.id,
+      enabled: true,
+    });
 
-  // 2. Open the side panel
-  await chrome.sidePanel.open({ tabId: tab.id });
+    // 2. Open the side panel
+    await chrome.sidePanel.open({ tabId: tab.id });
+  } catch (error) {
+    // Catch and log the error to prevent the "Uncaught (in promise)" error
+    // when clicking the icon on an inaccessible page (e.g., chrome-untrusted:// or browser settings pages)
+    console.warn(
+      `Failed to open side panel for tabId: ${tab.id} on URL: ${url}. Error: ${error.message}`
+    );
+  }
 });
 
 console.log("Service Worker Initialized");
